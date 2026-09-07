@@ -35,67 +35,6 @@ jobs:
           name: quant.ew.zip
           path: target/quant.ew.zip
 
-  build-proxy-linux:
-    name: Build proxy for linux
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-      - name: Install extra deps
-        run: sudo apt-get update && sudo apt-get install -y libclang-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev gcc-mingw-w64-i686 gcc-mingw-w64 libasound2-dev libjack-dev
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: noita_proxy -> target
-
-      - name: Build Linux proxy release
-        run: cargo build --release
-        working-directory: ./noita_proxy
-      
-      - name: Create archives
-        run: python scripts/ci_make_archives.py linux
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: noita_proxy-linux.zip
-          path: target/noita_proxy-linux.zip
-
-  build-proxy-macos:
-    name: Build proxy for macos (${{ matrix.architecture }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            architecture: arm64
-            zip_name: noita_proxy-macos-arm64.zip
-          - os: macos-15-intel
-            architecture: intel
-            zip_name: noita_proxy-macos-intel.zip
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: noita_proxy -> target
-
-      - name: Build Macos proxy release
-        run: export CMAKE_POLICY_VERSION_MINIMUM=3.5 && cargo build --release
-        working-directory: ./noita_proxy
-
-      - name: Create archives
-        run: python scripts/ci_make_archives.py macos
-
-      - name: Rename archive
-        run: mv target/noita_proxy-macos.zip target/${{ matrix.zip_name }}
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.zip_name }}
-          path: target/${{ matrix.zip_name }}
-
   build-proxy-windows:
     name: Build proxy for windows
     runs-on: windows-2022
@@ -124,7 +63,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-    needs: [build-mod, build-proxy-linux, build-proxy-windows, build-proxy-macos]
+    needs: [build-mod, build-proxy-windows]
 
     steps:
       - uses: actions/checkout@v4
