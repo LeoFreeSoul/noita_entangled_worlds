@@ -1042,6 +1042,19 @@ impl NetManager {
                     );
                 }
                 LocalHealthMode::PermaDeath => state.try_ws_write_option("perma_death", true),
+                LocalHealthMode::SpawnRespawn => {
+                    state.try_ws_write_option("respawn_at_start", true);
+                    state.try_ws_write_option(
+                        "global_hp_loss",
+                        settings.global_hp_loss.unwrap_or(def.global_hp_loss),
+                    );
+                    state.try_ws_write_option(
+                        "health_lost_on_revive",
+                        settings
+                            .health_lost_on_revive
+                            .unwrap_or(def.health_lost_on_revive),
+                    );
+                }
                 LocalHealthMode::Alternate => {
                     state.try_ws_write_option("no_notplayer", true);
                     state.try_ws_write_option(

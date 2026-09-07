@@ -379,6 +379,25 @@ local function player_died()
         return
     end
 
+    if ctx.proxy_opt.respawn_at_start then
+        local player_entity = ctx.my_player.entity
+        local spawn_pos = ctx.run_start_player_pos or ctx.initial_player_pos
+
+        rpc.remove_homing(false)
+        remove_stuff(player_entity)
+        EntitySetTransform(player_entity, spawn_pos.x, spawn_pos.y)
+
+        local character_data = EntityGetFirstComponentIncludingDisabled(player_entity, "CharacterDataComponent")
+        if character_data ~= nil then
+            ComponentSetValue2(character_data, "mVelocity", 0, 0)
+        end
+
+        reduce_hp()
+        do_switch_effect(true)
+        rpc.revive_message()
+        return
+    end
+
     GameAddFlagRun("ew_flag_notplayer_active")
     if ctx.proxy_opt.no_notplayer then
         no_notplayer()

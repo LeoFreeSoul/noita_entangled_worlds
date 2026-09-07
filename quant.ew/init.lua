@@ -409,6 +409,16 @@ function OnPlayerSpawned(player_entity) -- This runs when player entity has been
     local x, y = EntityGetTransform(player_entity)
     ctx.initial_player_pos = { x = x, y = y }
 
+    local run_start_x = tonumber(GlobalsGetValue("ew_run_start_player_x", ""))
+    local run_start_y = tonumber(GlobalsGetValue("ew_run_start_player_y", ""))
+    if run_start_x == nil or run_start_y == nil then
+        run_start_x = x
+        run_start_y = y
+        GlobalsSetValue("ew_run_start_player_x", tostring(run_start_x))
+        GlobalsSetValue("ew_run_start_player_y", tostring(run_start_y))
+    end
+    ctx.run_start_player_pos = { x = run_start_x, y = run_start_y }
+
     local my_player = player_fns.make_playerdata_for(player_entity, ctx.my_id)
     ctx.players[ctx.my_id] = my_player
     ctx.player_data_by_local_entity[player_entity] = my_player

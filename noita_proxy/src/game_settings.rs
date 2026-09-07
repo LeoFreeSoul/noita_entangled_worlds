@@ -126,6 +126,7 @@ impl Default for DefaultSettings {
 pub enum LocalHealthMode {
     Normal,
     Alternate,
+    SpawnRespawn,
     PermaDeath,
     PvP,
 }
@@ -142,6 +143,7 @@ impl GameMode {
             GameMode::SharedHealth => Color32::LIGHT_BLUE,
             GameMode::LocalHealth(LocalHealthMode::Normal) => Color32::GOLD,
             GameMode::LocalHealth(LocalHealthMode::Alternate) => Color32::GREEN,
+            GameMode::LocalHealth(LocalHealthMode::SpawnRespawn) => Color32::LIGHT_GREEN,
             GameMode::LocalHealth(LocalHealthMode::PermaDeath) => Color32::ORANGE,
             GameMode::LocalHealth(LocalHealthMode::PvP) => Color32::RED,
         }
@@ -154,6 +156,7 @@ impl Display for GameMode {
             GameMode::SharedHealth => "Shared",
             GameMode::LocalHealth(LocalHealthMode::Normal) => "LocalNormal",
             GameMode::LocalHealth(LocalHealthMode::Alternate) => "LocalAlternate",
+            GameMode::LocalHealth(LocalHealthMode::SpawnRespawn) => "LocalSpawnRespawn",
             GameMode::LocalHealth(LocalHealthMode::PermaDeath) => "LocalPermadeath",
             GameMode::LocalHealth(LocalHealthMode::PvP) => "PvP",
         };
@@ -169,6 +172,7 @@ impl FromStr for GameMode {
             "Shared" => Ok(GameMode::SharedHealth),
             "LocalNormal" => Ok(GameMode::LocalHealth(LocalHealthMode::Normal)),
             "LocalAlternate" => Ok(GameMode::LocalHealth(LocalHealthMode::Alternate)),
+            "LocalSpawnRespawn" => Ok(GameMode::LocalHealth(LocalHealthMode::SpawnRespawn)),
             "LocalPermadeath" => Ok(GameMode::LocalHealth(LocalHealthMode::PermaDeath)),
             "PvP" => Ok(GameMode::LocalHealth(LocalHealthMode::PvP)),
             _ => Err(()),
@@ -200,6 +204,13 @@ impl GameSettings {
                                 &mut temp,
                                 GameMode::LocalHealth(LocalHealthMode::Alternate),
                                 tr("Local-health-alt"),
+                            )
+                            .changed()
+                        || ui
+                            .radio_value(
+                                &mut temp,
+                                GameMode::LocalHealth(LocalHealthMode::SpawnRespawn),
+                                tr("Local-health-spawn-respawn"),
                             )
                             .changed()
                         || ui
@@ -304,6 +315,26 @@ impl GameSettings {
                                         game_settings.revive_on_drop.unwrap_or(def.revive_on_drop);
                                     if ui.checkbox(&mut temp, tr("revive_on_drop")).changed() {
                                         game_settings.revive_on_drop = Some(temp)
+                                    }
+                                }
+                            }
+                            LocalHealthMode::SpawnRespawn => {
+                                ui.label(tr("local_health_spawn_respawn_desc"));
+                                ui.add_space(5.0);
+                                ui.label(tr("Health-percent-lost-on-reviving"));
+                                {
+                                    let mut temp = game_settings
+                                        .health_lost_on_revive
+                                        .unwrap_or(def.health_lost_on_revive);
+                                    if ui.add(Slider::new(&mut temp, 0..=100)).changed() {
+                                        game_settings.health_lost_on_revive = Some(temp)
+                                    }
+                                }
+                                {
+                                    let mut temp =
+                                        game_settings.global_hp_loss.unwrap_or(def.global_hp_loss);
+                                    if ui.checkbox(&mut temp, tr("global_hp_loss")).changed() {
+                                        game_settings.global_hp_loss = Some(temp)
                                     }
                                 }
                             }
