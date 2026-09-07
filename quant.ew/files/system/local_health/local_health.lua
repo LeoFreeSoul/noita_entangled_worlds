@@ -324,9 +324,11 @@ local function fake_polymorph_into_entity(entity_path)
     return notplayer
 end
 
-function fake_unpolymorph()
+function fake_unpolymorph(target_x, target_y)
     local notplayer = ctx.my_player.entity
     local x, y = EntityGetTransform(notplayer)
+    x = target_x or x
+    y = target_y or y
     local base64_string = tostring(GlobalsGetValue("ew_local_player_dead", ""))
 
     assert(not (base64_string == nil or base64_string == ""), "SERIALIZED PLAYER ENTITY STRING IS MISSING !!!")
@@ -380,12 +382,13 @@ local function player_died()
     end
 
     if ctx.proxy_opt.respawn_at_start then
-        local player_entity = ctx.my_player.entity
         local spawn_pos = ctx.run_start_player_pos or ctx.initial_player_pos
 
         rpc.remove_homing(false)
+        fake_polymorph_into_entity("mods/quant.ew/files/system/local_health/notplayer/notplayer.xml")
+        local player_entity = fake_unpolymorph(spawn_pos.x, spawn_pos.y)
         remove_stuff(player_entity)
-        EntitySetTransform(player_entity, spawn_pos.x, spawn_pos.y)
+        polymorph.switch_entity(player_entity)
 
         local character_data = EntityGetFirstComponentIncludingDisabled(player_entity, "CharacterDataComponent")
         if character_data ~= nil then
