@@ -306,10 +306,13 @@ local function reset_cast_state_if_has_any_other_item(player_data)
     end
 end
 
-local function fake_polymorph_into_entity(entity_path)
+local function fake_polymorph_into_entity(entity_path, target_x, target_y)
     local player_entity = ctx.my_player.entity
     local x, y = EntityGetTransform(player_entity)
+    x = target_x or x
+    y = target_y or y
     local notplayer = EntityLoad(entity_path, x, y)
+    EntitySetTransform(notplayer, x, y)
     np.SetPlayerEntity(notplayer)
 
     EntityAddTag(notplayer, "ew_notplayer")
@@ -385,7 +388,13 @@ local function player_died()
         local spawn_pos = ctx.run_start_player_pos or ctx.initial_player_pos
 
         rpc.remove_homing(false)
-        fake_polymorph_into_entity("mods/quant.ew/files/system/local_health/notplayer/notplayer.xml")
+        local notplayer = fake_polymorph_into_entity(
+            "mods/quant.ew/files/system/local_health/notplayer/notplayer.xml",
+            spawn_pos.x,
+            spawn_pos.y
+        )
+        EntitySetTransform(notplayer, spawn_pos.x, spawn_pos.y)
+        GameSetCameraPos(spawn_pos.x, spawn_pos.y)
         local player_entity = fake_unpolymorph(spawn_pos.x, spawn_pos.y)
         remove_stuff(player_entity)
         polymorph.switch_entity(player_entity)
