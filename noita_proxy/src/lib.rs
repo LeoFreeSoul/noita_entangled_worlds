@@ -9,7 +9,6 @@ pub use app::App;
 pub use cli::{Args, connect_cli, host_cli};
 pub use util::{lang, steam_helper};
 
-use audio_settings::AudioSettings;
 use bookkeeping::{mod_manager, releases};
 use game_map::ImageMap;
 use game_settings::{DefaultSettings, GameSettings};
@@ -25,7 +24,6 @@ mod player_cosmetics;
 mod util;
 
 mod app;
-mod audio_settings;
 mod game_map;
 mod game_settings;
 mod player_settings;

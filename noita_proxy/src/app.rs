@@ -25,8 +25,9 @@ use eframe::egui::{
     TextureOptions, ThemePreference, Ui, UiBuilder, Vec2, Visuals, Window,
 };
 
+use crate::{DEFAULT_PORT, lang::LANGS};
 use crate::{
-    AudioSettings, DefaultSettings, GameSettings, ImageMap, NetManStopOnDrop, PlayerAppearance,
+    DefaultSettings, GameSettings, ImageMap, NetManStopOnDrop, PlayerAppearance,
     bookkeeping::{
         mod_manager,
         noita_launcher::{LaunchTokenResult, NoitaLauncher},
@@ -52,7 +53,6 @@ use crate::{
     steam_helper,
     util::steam_helper::LobbyExtraData,
 };
-use crate::{DEFAULT_PORT, lang::LANGS};
 
 enum AppState {
     Connect,
@@ -80,7 +80,6 @@ enum ConnectedMenu {
     Mods,
     BanList,
     ConnectionInfo,
-    VoIP,
     Map,
     NoitaLog,
     ProxyLog,
@@ -127,7 +126,6 @@ impl Default for AppSavedState {
 
 pub struct App {
     state: AppState,
-    audio: AudioSettings,
     modmanager: Modmanager,
     steam_state: Result<steam_helper::SteamState, SteamAPIInitError>,
     app_saved_state: AppSavedState,
@@ -142,7 +140,6 @@ pub struct App {
     appearance: PlayerAppearance,
     connected_menu: ConnectedMenu,
     show_host_settings: bool,
-    show_audio_settings: bool,
     running_on_steamdeck: bool,
     copied_lobby: bool,
     my_lobby_kind: LobbyKind,
@@ -173,7 +170,6 @@ impl App {
         let Settings {
             color: appearance,
             app: mut saved_state,
-            audio,
             mut paths,
         } = settings;
         paths.proxy_settings = Some(save_paths.settings_path.clone());
@@ -238,7 +234,6 @@ impl App {
 
         let mut me = Self {
             state,
-            audio,
             modmanager: Modmanager::default(),
             steam_state,
             app_saved_state: saved_state,
@@ -252,7 +247,6 @@ impl App {
             appearance,
             connected_menu: ConnectedMenu::Normal,
             show_host_settings: false,
-            show_audio_settings: false,
             running_on_steamdeck,
             copied_lobby: true,
             my_lobby_kind,
@@ -274,15 +268,10 @@ impl App {
     }
 
     fn set_settings(&self) {
-        let mut audio = self.audio.clone();
-        audio.input_devices.clear();
-        audio.output_devices.clear();
-
         let result = Settings {
             color: self.appearance.clone(),
             app: self.app_saved_state.clone(),
             paths: self.paths.clone(),
-            audio,
         }
         .save(self.paths.proxy_settings());
         match result {
@@ -366,11 +355,7 @@ impl App {
     fn start_server(&mut self) {
         let bind_addr = SocketAddr::new("::".parse().unwrap(), DEFAULT_PORT);
         let peer = Peer::host(bind_addr, None).unwrap();
-        let netman = NetManager::new(
-            PeerVariant::Tangled(peer),
-            self.get_netman_init(),
-            self.audio.clone(),
-        );
+        let netman = NetManager::new(PeerVariant::Tangled(peer), self.get_netman_init());
         self.set_netman_settings(&netman);
         self.change_state_to_netman(
             netman,
@@ -404,11 +389,7 @@ impl App {
     }
 
     fn start_connect_step_2(&mut self, peer: Peer) {
-        let netman = NetManager::new(
-            PeerVariant::Tangled(peer),
-            self.get_netman_init(),
-            self.audio.clone(),
-        );
+        let netman = NetManager::new(PeerVariant::Tangled(peer), self.get_netman_init());
         self.change_state_to_netman(
             netman,
             self.paths.noita_quantew_player_spritesheet().clone(),
@@ -432,11 +413,7 @@ impl App {
                 .unwrap_or(DefaultSettings::default().max_players),
             self.make_lobby_extra_data(),
         );
-        let netman = NetManager::new(
-            PeerVariant::Steam(peer),
-            self.get_netman_init(),
-            self.audio.clone(),
-        );
+        let netman = NetManager::new(PeerVariant::Steam(peer), self.get_netman_init());
         self.set_netman_settings(&netman);
         self.change_state_to_netman(
             netman,
@@ -468,11 +445,7 @@ impl App {
             self.steam_state.as_ref().unwrap().client.clone(),
         );
 
-        let netman = NetManager::new(
-            PeerVariant::Steam(peer),
-            self.get_netman_init(),
-            self.audio.clone(),
-        );
+        let netman = NetManager::new(PeerVariant::Steam(peer), self.get_netman_init());
         self.change_state_to_netman(
             netman,
             self.paths.noita_quantew_player_spritesheet().clone(),
@@ -560,12 +533,6 @@ impl App {
                             }
                             if self.show_host_settings {
                                 self.app_saved_state.game_settings.show_editor(ui, true)
-                            }
-                            if ui.button("Show audio settings").clicked() {
-                                self.show_audio_settings = !self.show_audio_settings
-                            }
-                            if self.show_audio_settings {
-                                self.audio.show_ui(ui, true);
                             }
                             if self.running_on_steamdeck && ui.button("Close Proxy").clicked() {
                                 exit(0)
@@ -986,11 +953,6 @@ impl App {
                     ConnectedMenu::Settings,
                     "Game Settings",
                 );
-                ui.selectable_value(
-                    &mut self.connected_menu,
-                    ConnectedMenu::VoIP,
-                    "VoIP Settings",
-                );
                 ui.selectable_value(&mut self.connected_menu, ConnectedMenu::Map, "Chunk Map");
                 ui.selectable_value(
                     &mut self.connected_menu,
@@ -1194,34 +1156,6 @@ impl App {
                         ctx.request_repaint_after(Duration::from_millis(16));
                     }
                 },
-                ConnectedMenu::VoIP => {
-                    let mut save = self.audio.show_ui(ui, false);
-                    for peer in netman.peer.iter_peer_ids() {
-                        if netman.peer.my_id() != peer {
-                            ui.label(format!(
-                                "volume for {}",
-                                netman
-                                    .nicknames
-                                    .lock()
-                                    .unwrap()
-                                    .get(&peer)
-                                    .unwrap_or(&peer.to_string())
-                            ));
-                            if ui
-                                .add(Slider::new(
-                                    self.audio.volume.entry(peer).or_insert(1.0),
-                                    0.0..=8.0,
-                                ))
-                                .changed()
-                            {
-                                save = true;
-                            }
-                        }
-                    }
-                    if save {
-                        *netman.audio.lock().unwrap() = self.audio.clone()
-                    }
-                }
                 ConnectedMenu::NoitaLog => {
                     if !self.noitalog.is_empty() {
                         let mut s = self.noitalog[self.noitalog_number].clone() + "\n";

@@ -4,17 +4,13 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    app::AppSavedState, audio_settings::AudioSettings, paths::Paths,
-    player_settings::PlayerAppearance,
-};
+use crate::{app::AppSavedState, paths::Paths, player_settings::PlayerAppearance};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Settings {
     pub color: PlayerAppearance,
     pub app: AppSavedState,
-    pub audio: AudioSettings,
     pub paths: Paths,
 }
 

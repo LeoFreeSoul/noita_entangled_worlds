@@ -1,4 +1,3 @@
-use audio::AudioManager;
 use bitcode::{Decode, Encode};
 use des::DesManager;
 use image::DynamicImage::ImageRgba8;
@@ -35,14 +34,13 @@ use crate::paths::Paths;
 use crate::player_cosmetics::{PlayerPngDesc, create_player_png, get_player_skin};
 use crate::steam_helper::LobbyExtraData;
 use crate::{
-    AudioSettings, DefaultSettings, GameSettings,
+    DefaultSettings, GameSettings,
     bookkeeping::save_state::{SaveState, SaveStateEntry},
     game_settings::{GameMode, LocalHealthMode},
 };
 use shared::des::ProxyToDes;
 use tangled::Reliability;
 use tracing::{error, info, warn};
-mod audio;
 mod des;
 pub mod messages;
 mod proxy_opt;
@@ -85,7 +83,6 @@ pub(crate) struct NetInnerState {
     pub(crate) ms: Option<MessageSocket<NoitaOutbound, NoitaInbound>>,
     world: WorldManager,
     des: DesManager,
-    audio: Option<AudioManager>,
     explosion_data: Vec<ExplosionData>,
     had_a_disconnect: bool,
     flags: FxHashSet<String>,
@@ -222,11 +219,6 @@ pub struct NetManager {
         crossbeam::channel::Sender<NetMsg>,
         crossbeam::channel::Receiver<NetMsg>,
     ),
-    pub audio: Mutex<AudioSettings>,
-    push_to_talk: AtomicBool,
-    is_dead: AtomicBool,
-    is_polied: AtomicBool,
-    is_cess: AtomicBool,
     duplicate: AtomicBool,
     pub back_out: AtomicBool,
     pub chunk_map: Mutex<FxHashMap<ChunkCoord, RgbaImage>>,
@@ -237,7 +229,7 @@ pub struct NetManager {
 }
 
 impl NetManager {
-    pub fn new(peer: omni::PeerVariant, init: NetManagerInit, audio: AudioSettings) -> Arc<Self> {
+    pub fn new(peer: omni::PeerVariant, init: NetManagerInit) -> Arc<Self> {
         Self {
             peer,
             pending_settings: Mutex::new(GameSettings::default()),
@@ -263,11 +255,6 @@ impl NetManager {
             minas: Default::default(),
             new_desc: Default::default(),
             loopback_channel: crossbeam::channel::unbounded(),
-            audio: audio.into(),
-            push_to_talk: Default::default(),
-            is_dead: Default::default(),
-            is_polied: Default::default(),
-            is_cess: Default::default(),
             duplicate: Default::default(),
             back_out: Default::default(),
             chunk_map: Default::default(),
@@ -404,13 +391,6 @@ impl NetManager {
         let is_host = self.is_host();
         info!("Is host: {is_host}");
 
-        let audio_settings = self.audio.lock().unwrap().clone();
-        let audio_state = if !audio_settings.disabled {
-            Some(AudioManager::new(audio_settings))
-        } else {
-            None
-        };
-
         let (world, rx, recv, sendm, tx) = WorldManager::new(
             is_host,
             self.peer.my_id(),
@@ -423,7 +403,6 @@ impl NetManager {
             des: DesManager::new(is_host, self.init_settings.save_state.clone()),
             had_a_disconnect: false,
             flags: self.init_settings.save_state.load().unwrap_or_default(),
-            audio: audio_state,
         };
         let mut last_iter = Instant::now();
         let path = crate::player_path(self.init_settings.paths.noita_quantew_install.clone());
@@ -581,49 +560,6 @@ impl NetManager {
                 self.send(dest, &NetMsg::ForwardProxyToDes(msg), Reliability::Reliable);
             }
 
-            let mut audio_data = Vec::new();
-            while let Some(data) = state
-                .audio
-                .as_mut()
-                .and_then(|audio| audio.recv_audio().ok())
-            {
-                audio_data.push(data)
-            }
-            if !audio_data.is_empty() {
-                let audio = self.audio.lock().unwrap();
-                if !audio.mute_in
-                    && (!audio.mute_in_while_dead || !self.is_dead.load(Ordering::Relaxed))
-                    && (!audio.mute_in_while_polied
-                        || !self.is_polied.load(Ordering::Relaxed)
-                        || self.is_dead.load(Ordering::Relaxed))
-                    && (!audio.push_to_talk || self.push_to_talk.load(Ordering::Relaxed))
-                    && !self.is_cess.load(Ordering::Relaxed)
-                    && audio.global_input_volume != 0.0
-                {
-                    let (x, y) = if audio.player_position {
-                        (
-                            self.player_pos.0.load(Ordering::Relaxed),
-                            self.player_pos.1.load(Ordering::Relaxed),
-                        )
-                    } else {
-                        (
-                            self.camera_pos.0.load(Ordering::Relaxed),
-                            self.camera_pos.1.load(Ordering::Relaxed),
-                        )
-                    };
-                    let data = NetMsg::AudioData(
-                        audio_data,
-                        audio.global,
-                        x,
-                        y,
-                        audio.global_input_volume,
-                    );
-                    if audio.loopback {
-                        self.send(self.peer.my_id(), &data, Reliability::Reliable)
-                    }
-                    self.broadcast(&data, Reliability::Reliable);
-                }
-            }
             let mut map = FxHashMap::default();
             while let Ok((ch, img)) = rx.try_recv() {
                 map.insert(ch, img);
@@ -748,27 +684,8 @@ impl NetManager {
         sendm: &Sender<FxHashMap<u16, u32>>,
     ) {
         match net_msg {
-            NetMsg::AudioData(data, global, tx, ty, vol) => {
-                let Some(state_audio) = &mut state.audio else {
-                    return;
-                };
-                if self.is_cess.load(Ordering::Relaxed) {
-                    return;
-                }
-                let audio = self.audio.lock().unwrap().clone();
-                let pos = if audio.player_position {
-                    (
-                        self.player_pos.0.load(Ordering::Relaxed),
-                        self.player_pos.1.load(Ordering::Relaxed),
-                    )
-                } else {
-                    (
-                        self.camera_pos.0.load(Ordering::Relaxed),
-                        self.camera_pos.1.load(Ordering::Relaxed),
-                    )
-                };
-                state_audio.play_audio(audio, pos, src, data, global, (tx, ty), vol);
-            }
+            // Kept as a no-op protocol placeholder so later NetMsg variant indices stay stable.
+            NetMsg::AudioData(_, _, _, _, _) => {}
             NetMsg::PlayerPosition(x, y, is_dead, does_exist) => {
                 let map = &mut self.players_sprite.lock().unwrap();
                 map.entry(src).and_modify(|(w, b, d, _)| {
@@ -1343,14 +1260,6 @@ impl NetManager {
                         Reliability::Reliable,
                     );
                 }
-                let x: Option<u8> = msg.next().and_then(|s| s.parse().ok());
-                self.push_to_talk.store(x == Some(1), Ordering::Relaxed);
-                let dead = msg.next().and_then(|s| s.parse().ok()) == Some(1);
-                self.is_dead.store(dead, Ordering::Relaxed);
-                let polied = msg.next().and_then(|s| s.parse().ok()) == Some(1);
-                self.is_polied.store(polied, Ordering::Relaxed);
-                let cess = msg.next().and_then(|s| s.parse().ok()) == Some(1);
-                self.is_cess.store(cess, Ordering::Relaxed);
             }
             Some("reset_world") => {
                 state.world.reset();
